@@ -2,7 +2,7 @@
  * PASTE YOUR COOKIE BETWEEN THE QUOTES
  * @preserve
  */
-const Cookies = 'sessionKey=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; intercom-device-id-lupk8zyo=a531e37c-c6cc-4b26-adaa-f678e3eb349c; __cf_bm=iUlsFGS6V.4XznfVUrT4W.gkX9bdfUKU7ehs8YK443k-1691564163-0-AbmsuBt6zaobpnU2uoFCMX9NGNAAGaYvdJEBd5KTq+kHKdZDGIvcmBQPv6bMgQLGdcUMtFOeyOII9zqwz6MKKYA=; intercom-session-lupk8zyo=bWtnU21rMnVpelMwN2JqSFd2N3hnZmRVeFJPZjhJaGdUM0U0UVdPUzA3MEdOVzBsWnFqOCtKZFQ1UlU1Vk5kZy0teVBpRmNtcGxQejhWZGZjcW1paVRKUT09--df4a6ee9227c7db9c10bcae43040da2355377e45';
+const Cookies = '';
 
 /**
 ## EXPERIMENTAL
@@ -63,30 +63,31 @@ const Cookies = 'sessionKey=sk-ant-sid01-oEZ_pdm2KrevDpRQIgZPuzEZeQc7Yf5NuJRe4l_
  * @preserve
  */
 const Settings = {
-    padtxt: true,  //自动补全tokens超过10000
-    ReplaceSamples: false,
-    AntiStall: false,
-    ClearFlags: true,
-    DeleteChats: false,
-    PassParams: false,
-    PreventImperson: true,
-    PromptExperiment: true,
-    RecycleChats: false,
-    RetryRegenerate: false,
-    StripAssistant: true,
-    StripHuman: false,
-    RemoveFirstH : true, //去除一个Human:
-    FullColon: true,  //防止Human与Assistant被替换为H与A
-    xmlPlot: true //增加xml tags
+    padtxt: process.env.padtxt || true,  //自动补全tokens超过10000
+    ReplaceSamples: process.env.ReplaceSamples || false,
+    AntiStall: process.env.AntiStall || 2,
+    ClearFlags: process.env.ClearFlags || true,
+    DeleteChats: process.env.DeleteChats || false,
+    PassParams: process.env.PassParams || false,
+    PreventImperson: process.env.PreventImperson || false,
+    PromptExperiment: process.env.PromptExperiment || true,
+    RecycleChats: process.env.RecycleChats || false,
+    RetryRegenerate: process.env.RetryRegenerate || false,
+    StripAssistant: process.env.StripAssistant || true,
+    StripHuman: process.env.StripHuman || false,
+    RemoveFirstH: process.env.RemoveFirstH || true,
+    FullColon: process.env.FullColon || true,
+    localtunnel: process.env.localtunnel || false,
+    xmlPlot: process.env.xmlPlot || 1
 };
 
 /***********************/
 const Ip = process.env.PORT ? '0.0.0.0' : '127.0.0.1';
-const Port = 8000;
+const Port = process.env.PORT || 8444;
 
 const Cookie = process.env.Cookie || Cookies;
 
-const localtunnel = require('localtunnel');
+//const localtunnel = require('localtunnel');
 
 const padJson = (json) => {
     var placeholder = '以上内容无效 '; // 定义占位符
@@ -109,6 +110,8 @@ const padJson = (json) => {
         var result = json;
     }
 
+    result = result.replace(/^\s*/, '');
+
     return result
 };
 
@@ -124,6 +127,8 @@ const AddxmlPlot = (content) => {
         return content;
     }
 
+    content = content.replace(/\n\nSystem:\s*/g, '\n\n');
+
     // 在第一个"[Start a new"前面加上"<example>"，在最后一个"[Start a new"前面加上"</example>"
     let firstChatStart = content.indexOf('\n\n[Start a new');
     let lastChatStart = content.lastIndexOf('\n\n[Start a new');
@@ -133,7 +138,7 @@ const AddxmlPlot = (content) => {
                 content.slice(lastChatStart);
     }
         
-    // 之后的第一个"Assistant: "之前插入"<plot>\n\n"
+    // 之后的第一个"Assistant: "之前插入"\n\n<plot>"
     let lastChatIndex = content.lastIndexOf('\n\n[Start a new');
     if (lastChatIndex != -1) { 
         let assistantIndex = content.indexOf('\n\nAssistant:', lastChatIndex);
@@ -141,6 +146,54 @@ const AddxmlPlot = (content) => {
             content = content.slice(0, assistantIndex) + '\n\n<plot>' + content.slice(assistantIndex);
         }
     }
+  
+    let sexMatch = content.match(/\n##.*?\n<sex>[\s\S]*?<\/sex>\n/);
+    let deleteMatch = content.match(/\n##.*?\n<delete>[\s\S]*?<\/delete>\n/);
+  
+    if (sexMatch && deleteMatch) {
+      content = content.replace(sexMatch[0], ""); // 移除<sex>部分
+      content = content.replace(deleteMatch[0], sexMatch[0] + deleteMatch[0]); // 将<sex>部分插入<delete>部分的前面
+    }
+
+    content = content.replace(/\n\n<\/plot>[\s\S]*?\n\n<\/plot>/, '\n\n</plot>'); //sd prompt用
+
+    content = content.replace(/\n\n<example>\n\n<\/example>/, '');
+    content = content.replace(/(?<=\n\n<card>\n)\s*/, '');
+    content = content.replace(/\s*(?=\n<\/card>\n\n)/, '');
+
+    return content
+};
+
+const AddxmlPlot2 = (content) => {
+    // 检查内容中是否包含"<card>","[Start a new"字符串
+    if (!content.includes('<card>')) {
+        return content;
+    }
+
+    content = content.replace(/\n\nSystem:\s*/g, '\n\n');
+
+    // 在第一个"[Start a new"前面加上"<example>"，在最后一个"[Start a new"前面加上"</example>"
+    let firstChatStart = content.indexOf('\n\n[Start a new');
+    let lastChatStart = content.lastIndexOf('\n\n[Start a new');
+    if (firstChatStart != -1) { 
+        content = content.slice(0, firstChatStart) + '\n\n</card>\n\n<example>' + 
+                content.slice(firstChatStart, lastChatStart) + '\n\n</example>' + 
+                content.slice(lastChatStart);
+    }
+        
+    let sexMatch = content.match(/\n##.*?\n<sex>[\s\S]*?<\/sex>\n/);
+    let deleteMatch = content.match(/\n##.*?\n<delete>[\s\S]*?<\/delete>\n/);
+  
+    if (sexMatch && deleteMatch) {
+      content = content.replace(sexMatch[0], ""); // 移除<sex>部分
+      content = content.replace(deleteMatch[0], sexMatch[0] + deleteMatch[0]); // 将<sex>部分插入<delete>部分的前面
+    }
+
+    content = content.replace(/\n\n<hidden>[\s\S]*?\n\n<\/plot>/, '\n\n<hidden>'); //sd prompt用
+
+    content = content.replace(/(?<=\n<(card|hidden|example)>\n)\s*/g, '');
+    content = content.replace(/\s*(?=\n<\/(card|hidden|example)>(\n|$))/g, '');
+    content = content.replace(/\n\n<(example|hidden)>\n<\/\1>/g, '');
 
     return content
 };
@@ -429,7 +482,7 @@ const Proxy = Server(((req, res) => {
                 param: null,
                 code: 404
             }
-        }, 404);
+        }, 200); //404
     }
     setTitle('recv...');
     let fetchAPI;
@@ -457,6 +510,7 @@ const Proxy = Server(((req, res) => {
                     error: false
                 });
             }
+            if (body.model === 'claude') {body.model = 'claude-2'};
             const model = /claude-v?2.*/.test(body.model) ? AI.modelA() : body.model;
             model !== AI.modelA() && console.log(`[33mmodel[0m [1m${AI.modelA()}[0m [33mrecommended[0m`);
             stallProtected() || body.stream || Settings.PreventImperson || console.log('[33mhaving[0m [1mPreventImperson[0m: true or [1mAntiStall[0m [33m: 1/2 is good when not streaming[0m');
@@ -478,14 +532,15 @@ const Proxy = Server(((req, res) => {
             prompt = (text => {
                 const replacers = {
                     H: [ /(\n{2,}H: )/gm, Human ],
-                    A: [ /(\n{2,}A: )/gm, Assistant ]
+                    A: [ /(\n{2,}A: )/gm, Assistant ] 
                 };
                 return Settings.ReplaceSamples && (replacers.H[0].test(text) || replacers.A[0].test(text)) ? text.replace(replacers.H[0], replacers.H[1]).replace(replacers.A[0], replacers.A[1]) : text;
             })(genericFixes(prompt));
 /*****************************/
             if (Settings.RemoveFirstH) {prompt = RemoveFirstHuman(prompt);}
-            if (Settings.xmlPlot) {prompt = AddxmlPlot(prompt);}
-            if (Settings.FullColon) {prompt = prompt.replace(/: /g, "：");}
+            if (Settings.xmlPlot === 2) {prompt = AddxmlPlot2(prompt);}
+            else if (Settings.xmlPlot) {prompt = AddxmlPlot(prompt);}
+            if (Settings.FullColon) {prompt = prompt.replace(/: /g, '：');}
 /*****************************/         
             if (Settings.PromptExperiment && !samePrompt) {
                 attachments.push({
@@ -605,10 +660,13 @@ Proxy.listen(Port, Ip, (async () => {
     updateCookies(accRes);
     console.log(`[2mclewd v2.6[0m\n[33mhttp://${Ip}:${Port}/v1[0m\n\n${Object.keys(Settings).map((setting => `[1m${setting}:[0m [36m${Settings[setting]}[0m`)).sort().join('\n')}\n`);
 /*******************************/    
-    localtunnel({ port: Port })
-    .then((tunnel) => {
-        console.log(`\nTunnel URL for outer websites: ${tunnel.url}/v1\n`);
-    })
+    if (Settings.localtunnel) {
+        const localtunnel = require('localtunnel');
+        localtunnel({ port: Port })
+        .then((tunnel) => {
+            console.log(`\nTunnel URL for outer websites: ${tunnel.url}/v1\n`);
+        })
+    }
 /*******************************/  
     console.log('Logged in %o', {
         name: accInfo.name?.split('@')?.[0],
